@@ -131,3 +131,52 @@ impl AppState {
         }
     }
 }
+
+pub fn tooltip_for(state: &UsageState) -> String {
+    match (state.status, &state.data) {
+        (Status::LoggedOut, _) => "Token Usage Board · 未连接".into(),
+        (_, Some(d)) => {
+            let now = chrono::Utc::now().timestamp();
+            format!(
+                "MiMo · 剩 {:.0}% · 到期 {} 天",
+                100.0 - d.percent_used(),
+                d.days_left(now)
+            )
+        }
+        (_, None) => "Token Usage Board · 数据获取失败".into(),
+    }
+}
+
+#[cfg(test)]
+mod tooltip_tests {
+    use super::*;
+
+    fn sample_state(used: u64, total: u64, days_left: i64) -> UsageState {
+        let now = chrono::Utc::now().timestamp();
+        UsageState {
+            status: Status::Fresh,
+            data: Some(UsageData {
+                tier: "Standard".into(),
+                total_credits: total,
+                used_credits: used,
+                expire_at: now + days_left * 86400,
+                fetched_at: now,
+            }),
+            message: None,
+        }
+    }
+
+    #[test]
+    fn tooltip_shows_percent_and_days() {
+        let s = sample_state(250, 1000, 10);
+        let t = tooltip_for(&s);
+        assert!(t.contains("剩 75%"), "got: {t}");
+        assert!(t.contains("到期 10 天"), "got: {t}");
+    }
+
+    #[test]
+    fn tooltip_logged_out() {
+        let s = UsageState::default();
+        assert!(tooltip_for(&s).contains("未连接"));
+    }
+}

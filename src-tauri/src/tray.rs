@@ -41,6 +41,12 @@ pub fn setup_tray(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
+pub fn update_tray_tooltip(app: &AppHandle, tip: &str) {
+    if let Some(tray) = app.tray_by_id("main") {
+        let _ = tray.set_tooltip(Some(tip));
+    }
+}
+
 fn default_icon() -> Image<'static> {
     let size = 32u32;
     let mut rgba = vec![0u8; (size * size * 4) as usize];

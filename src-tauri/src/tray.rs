@@ -11,9 +11,10 @@ pub fn setup_tray(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
     let show = MenuItemBuilder::with_id("show", "打开面板").build(app)?;
     let login = MenuItemBuilder::with_id("login", "重新登录").build(app)?;
     let refresh = MenuItemBuilder::with_id("refresh", "刷新").build(app)?;
+    let logout = MenuItemBuilder::with_id("logout", "断开连接").build(app)?;
     let quit = MenuItemBuilder::with_id("quit", "退出").build(app)?;
     let menu = MenuBuilder::new(app)
-        .items(&[&show, &login, &refresh, &quit])
+        .items(&[&show, &login, &refresh, &logout, &quit])
         .build()?;
 
     let icon = default_icon();
@@ -33,6 +34,14 @@ pub fn setup_tray(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
                     let state = app.state::<AppState>();
                     let _ = state.refresh_now().await;
                 });
+            }
+            "logout" => {
+                let app_clone = app.clone();
+                tauri::async_runtime::spawn(async move {
+                    let state = app_clone.state::<AppState>();
+                    let _ = state.logout().await;
+                });
+                hide_panel(app);
             }
             "quit" => app.exit(0),
             _ => {}

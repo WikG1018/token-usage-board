@@ -3,7 +3,7 @@ use crate::state::AppState;
 use tauri::image::Image;
 use tauri::menu::{MenuBuilder, MenuItemBuilder};
 use tauri::tray::TrayIconBuilder;
-use tauri::{AppHandle, Manager, WebviewUrl, WebviewWindowBuilder};
+use tauri::{AppHandle, Manager, PhysicalPosition, WebviewUrl, WebviewWindowBuilder};
 
 const LOGIN_URL: &str = "https://platform.xiaomimimo.com/console/plan-manage";
 
@@ -23,7 +23,7 @@ pub fn setup_tray(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
         .menu(&menu)
         .show_menu_on_left_click(false)
         .on_menu_event(|app, event| match event.id().as_ref() {
-            "show" => toggle_panel(app),
+            "show" => position_and_show_panel(app),
             "login" => {
                 let _ = open_login_window(app);
             }
@@ -36,6 +36,11 @@ pub fn setup_tray(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
             }
             "quit" => app.exit(0),
             _ => {}
+        })
+        .on_tray_icon_event(|tray, event| {
+            if let tauri::tray::TrayIconEvent::Enter { .. } = event {
+                position_and_show_panel(tray.app_handle());
+            }
         })
         .build(app)?;
     Ok(())
@@ -71,14 +76,32 @@ fn default_icon() -> Image<'static> {
     Image::new_owned(rgba, size, size)
 }
 
-fn toggle_panel(app: &AppHandle) {
+fn position_and_show_panel(app: &AppHandle) {
     if let Some(w) = app.get_webview_window("panel") {
-        if w.is_visible().unwrap_or(false) {
-            let _ = w.hide();
-        } else {
-            let _ = w.show();
-            let _ = w.set_focus();
+        if let Ok(monitor) = w.current_monitor() {
+            if let Some(monitor) = monitor {
+                let screen = monitor.size();
+                let pos = monitor.position();
+                let scale = monitor.scale_factor();
+                // 面板逻辑尺寸 340x420，贴近屏幕右下角托盘区上方
+                let logical_w = 360.0;
+                let logical_h = 440.0;
+                let x = pos.x as f64 + screen.width as f64 / scale - logical_w - 12.0;
+                let y = pos.y as f64 + screen.height as f64 / scale - logical_h - 12.0;
+                let _ = w.set_position(PhysicalPosition::new(
+                    (x * scale) as i32,
+                    (y * scale) as i32,
+                ));
+            }
         }
+        let _ = w.show();
+        let _ = w.set_focus();
+    }
+}
+
+fn hide_panel(app: &AppHandle) {
+    if let Some(w) = app.get_webview_window("panel") {
+        let _ = w.hide();
     }
 }
 

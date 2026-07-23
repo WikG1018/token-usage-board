@@ -120,15 +120,32 @@ pub fn open_login_window(app: &AppHandle) -> Result<(), Box<dyn std::error::Erro
 
 const CAPTURE_SCRIPT: &str = r#"
 (function () {
+  function parseCookies(cookieStr) {
+    const out = [];
+    if (!cookieStr) return out;
+    cookieStr.split(/;\s*/).forEach(function (pair) {
+      if (!pair) return;
+      const idx = pair.indexOf("=");
+      if (idx < 0) {
+        out.push([pair.trim(), ""]);
+      } else {
+        out.push([pair.slice(0, idx).trim(), pair.slice(idx + 1).trim()]);
+      }
+    });
+    return out;
+  }
   const origFetch = window.fetch;
   window.fetch = async function (...args) {
     try {
       const [input, init] = args;
-      const url = typeof input === "string" ? input : input.url;
+      const url = typeof input === "string" ? input : (input && input.url);
       if (url && /usage|plan|credit|quota/i.test(url)) {
+        const headers = (init && init.headers) || {};
+        const cookies = parseCookies(document.cookie || "");
         window.__TAURI_INTERNALS__?.invoke("credential_candidate", {
           endpoint: url,
-          headers: (init && init.headers) || {},
+          headers: headers,
+          cookies: cookies,
         });
       }
     } catch (e) {}
@@ -142,11 +159,12 @@ pub async fn credential_candidate(
     app: tauri::AppHandle,
     endpoint: String,
     headers: serde_json::Value,
+    cookies: Vec<(String, String)>,
 ) -> Result<(), String> {
     let state = app.state::<AppState>();
     let cred = Credential {
         endpoint,
-        cookies: vec![],
+        cookies,
         extra_headers: serde_json::from_value::<Vec<(String, String)>>(headers)
             .unwrap_or_default(),
         obtained_at: chrono::Utc::now().timestamp(),

@@ -8,6 +8,9 @@ interface UsageData {
   used_credits: number;
   expire_at: number; // unix seconds
   fetched_at: number; // unix seconds
+  year_used?: number | null;
+  month_used?: number | null;
+  daily_usage?: Array<[number, number]> | null; // [date_unix_sec, used]
 }
 
 interface UsageState {
@@ -36,6 +39,21 @@ function fmtNumber(n: number): string {
   return n.toLocaleString("en-US");
 }
 
+/**
+ * 自适应单位的 token 数量格式化：
+ * ≥1亿 → X.XX 亿；≥1千万 → X.X 千万；≥1百万 → X.X 百万；否则原数字。
+ */
+function fmtTokens(n: number): string {
+  if (!Number.isFinite(n) || n <= 0) return "0";
+  const yi = 1e8;
+  const qianWan = 1e7;
+  const baiWan = 1e6;
+  if (n >= yi) return `${(n / yi).toFixed(2)} 亿`;
+  if (n >= qianWan) return `${(n / qianWan).toFixed(2)} 千万`;
+  if (n >= baiWan) return `${(n / baiWan).toFixed(2)} 百万`;
+  return fmtNumber(n);
+}
+
 function fmtTime(unixSec: number): string {
   const d = new Date(unixSec * 1000);
   const p = (x: number) => String(x).padStart(2, "0");
@@ -48,6 +66,12 @@ function fmtAgo(unixSec: number): string {
   if (diff < 3600) return `${Math.floor(diff / 60)} 分钟前`;
   if (diff < 86400) return `${Math.floor(diff / 3600)} 小时前`;
   return `${Math.floor(diff / 86400)} 天前`;
+}
+
+function fmtDayLabel(unixSec: number): string {
+  const d = new Date(unixSec * 1000);
+  const p = (x: number) => String(x).padStart(2, "0");
+  return `${p(d.getMonth() + 1)}/${p(d.getDate())}`;
 }
 
 function progressClass(d: UsageData): string {
@@ -93,6 +117,27 @@ function renderUsage(state: UsageState): string {
       ? `<div class="status-line error">登录已过期，请重新连接</div>`
       : "";
 
+  // 年/月用量区块：仅当任一字段存在时渲染
+  const hasYearMonth = d.year_used != null || d.month_used != null;
+  const yearMonthBlock = hasYearMonth
+    ? `
+      <div class="ym-block">
+        ${d.year_used != null ? `
+          <div class="ym-cell">
+            <span class="ym-label">年使用</span>
+            <span class="ym-value">${fmtTokens(d.year_used)}</span>
+          </div>` : ""}
+        ${d.month_used != null ? `
+          <div class="ym-cell">
+            <span class="ym-label">月使用</span>
+            <span class="ym-value">${fmtTokens(d.month_used)}</span>
+          </div>` : ""}
+      </div>`
+    : "";
+
+  // 近5日柱状图：仅当 daily_usage 存在且非空时渲染
+  const dailyBlock = renderDailyChart(d.daily_usage);
+
   return `
     <div class="panel">
       <div class="panel-header">
@@ -109,6 +154,8 @@ function renderUsage(state: UsageState): string {
           <div class="progress-fill ${progressClass(d)}" style="width:${pct}%"></div>
         </div>
       </div>
+
+      ${yearMonthBlock}
 
       <div class="meta">
         <div class="meta-cell">
@@ -136,6 +183,8 @@ function renderUsage(state: UsageState): string {
         </div>
       </div>
 
+      ${dailyBlock}
+
       <div class="actions">
         <button class="btn" id="btn-refresh"><span class="spinner"></span><span class="label">刷新</span></button>
         <button class="btn" id="btn-official"><span class="label">官方控制台</span></button>
@@ -144,6 +193,36 @@ function renderUsage(state: UsageState): string {
       ${state.message ? `<div class="status-line error">${state.message}</div>` : ""}
     </div>
   `;
+}
+
+/**
+ * 渲染近5日柱状图。仅当 daily 非空时返回 HTML，否则返回空串（不渲染该区块）。
+ * 柱高按当日用量 / max(全部用量) 计算；max 为 0 时所有柱子给极小高度避免全 0。
+ */
+function renderDailyChart(daily: UsageData["daily_usage"]): string {
+  if (!daily || daily.length === 0) return "";
+  const entries = daily.slice(-5); // 取最后5个，保证"近5日"
+  if (entries.length === 0) return "";
+  const max = Math.max(1, ...entries.map((e) => e[1]));
+  const bars = entries
+    .map(([ts, used]) => {
+      const h = Math.max(4, Math.round((used / max) * 100));
+      return `
+        <div class="bar-col">
+          <div class="bar-track">
+            <div class="bar" style="height:${h}%">
+              <span class="bar-value">${fmtTokens(used)}</span>
+            </div>
+          </div>
+          <span class="bar-day">${fmtDayLabel(ts)}</span>
+        </div>`;
+    })
+    .join("");
+  return `
+    <div class="daily-chart">
+      <div class="chart-title">近 ${entries.length} 日用量</div>
+      <div class="chart-bars">${bars}</div>
+    </div>`;
 }
 
 function renderFromState(state: UsageState): void {

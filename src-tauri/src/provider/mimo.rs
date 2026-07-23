@@ -33,6 +33,24 @@ struct ApiData {
     used_credits: Option<u64>,
     #[serde(default, alias = "expire_time", alias = "expires_at", alias = "end_time")]
     expire_at: Option<i64>,
+    /// 年度累计用量，兼容多种字段名
+    #[serde(default, alias = "year_used", alias = "yearly_used", alias = "annual_used")]
+    year_used: Option<u64>,
+    /// 本月累计用量
+    #[serde(default, alias = "month_used", alias = "monthly_used")]
+    month_used: Option<u64>,
+    /// 近 N 日每日明细：对象数组 [{date, used}] 或 [{ts, used}]
+    #[serde(default, alias = "daily_usage", alias = "recent_daily", alias = "daily_stats")]
+    daily: Option<Vec<DailyEntry>>,
+}
+
+#[derive(Debug, Deserialize)]
+struct DailyEntry {
+    /// 日期戳（unix 秒，00:00 当地或 UTC，原样透传）
+    #[serde(default, alias = "ts", alias = "timestamp", alias = "time")]
+    date: Option<i64>,
+    #[serde(default, alias = "used", alias = "count", alias = "tokens")]
+    used: Option<u64>,
 }
 
 pub fn parse_usage(body: &str, fetched_at: i64) -> Result<UsageData, ProviderError> {
@@ -56,12 +74,27 @@ pub fn parse_usage(body: &str, fetched_at: i64) -> Result<UsageData, ProviderErr
         .expire_at
         .ok_or_else(|| ProviderError::Parse("missing expire_at".into()))?;
 
+    let daily_usage = d.daily.and_then(|entries| {
+        let parsed: Vec<(i64, u64)> = entries
+            .into_iter()
+            .filter_map(|e| Some((e.date?, e.used?)))
+            .collect();
+        if parsed.is_empty() {
+            None
+        } else {
+            Some(parsed)
+        }
+    });
+
     Ok(UsageData {
         tier,
         total_credits: total,
         used_credits: used,
         expire_at: expire,
         fetched_at,
+        year_used: d.year_used,
+        month_used: d.month_used,
+        daily_usage,
     })
 }
 
@@ -133,6 +166,13 @@ mod tests {
         assert!((u.percent_used() - 25.0).abs() < 0.001);
         assert_eq!(u.fetched_at, now);
         assert!(u.expire_at > now || u.expire_at <= now);
+        // 新增字段
+        assert_eq!(u.year_used, Some(800_000_000));
+        assert_eq!(u.month_used, Some(120_000_000));
+        let daily = u.daily_usage.expect("daily_usage should parse");
+        assert_eq!(daily.len(), 5);
+        assert_eq!(daily[0], (1_800_000_000, 8_000_000));
+        assert_eq!(daily[4], (1_800_000_000 + 4 * 86400, 32_000_000));
     }
 
     #[test]
@@ -149,5 +189,27 @@ mod tests {
         assert_eq!(u.total_credits, 100);
         assert_eq!(u.used_credits, 10);
         assert_eq!(u.expire_at, 1_800_000_000);
+    }
+
+    #[test]
+    fn optional_fields_default_none_when_absent() {
+        let body = r#"{"data":{"plan":"Lite","total_credits":10,"used_credits":1,"expire_at":1800000000}}"#;
+        let u = parse_usage(body, 0).expect("should parse");
+        assert_eq!(u.year_used, None);
+        assert_eq!(u.month_used, None);
+        assert_eq!(u.daily_usage, None);
+    }
+
+    #[test]
+    fn daily_aliases_parsed() {
+        let body = r#"{"data":{
+            "plan":"Pro","total_credits":100,"used_credits":10,"expire_at":1800000000,
+            "recent_daily":[{"ts":1800000000,"count":1000},{"timestamp":1800086400,"tokens":2000}]
+        }}"#;
+        let u = parse_usage(body, 0).expect("should parse");
+        let daily = u.daily_usage.expect("daily should parse");
+        assert_eq!(daily.len(), 2);
+        assert_eq!(daily[0], (1_800_000_000, 1000));
+        assert_eq!(daily[1], (1_800_086_400, 2000));
     }
 }

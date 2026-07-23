@@ -16,7 +16,7 @@
         "label": "panel",
         "title": "Token Usage Board",
         "width": 340,
-        "height": 420,
+        "height": 620,
         "resizable": false,
         "decorations": false,
         "transparent": true,

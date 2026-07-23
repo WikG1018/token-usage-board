@@ -161,6 +161,9 @@ mod tooltip_tests {
                 used_credits: used,
                 expire_at: now + days_left * 86400,
                 fetched_at: now,
+                year_used: None,
+                month_used: None,
+                daily_usage: None,
             }),
             message: None,
         }

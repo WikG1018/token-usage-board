@@ -92,9 +92,9 @@ fn position_and_show_panel(app: &AppHandle) {
                 let screen = monitor.size();
                 let pos = monitor.position();
                 let scale = monitor.scale_factor();
-                // 面板逻辑尺寸 340x420，贴近屏幕右下角托盘区上方
+                // 面板逻辑尺寸 340x620，贴近屏幕右下角托盘区上方
                 let logical_w = 360.0;
-                let logical_h = 440.0;
+                let logical_h = 640.0;
                 let x = pos.x as f64 + screen.width as f64 / scale - logical_w - 12.0;
                 let y = pos.y as f64 + screen.height as f64 / scale - logical_h - 12.0;
                 let _ = w.set_position(PhysicalPosition::new(

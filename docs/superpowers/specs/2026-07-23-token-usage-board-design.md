@@ -1,13 +1,13 @@
 # Token Usage Board — 设计文档
 
-日期：2026-07-23
+日期：2026-07-23（2026-07-23 修订：新增深色玻璃 UI 与全平台架构）
 仓库名：token-usage-board
 许可证：MIT
-目标平台：Windows（常驻任务栏 / 系统托盘）
+目标平台：跨平台 —— 桌面（Windows/macOS/Linux 常驻系统托盘 + 悬停面板）与移动端（iOS/Android App 主界面 + 桌面小组件）。核心逻辑（取数/凭证/状态机）100% 复用，仅 UI 层与平台交互分形态实现。本期首交付 Windows，但架构与凭证存储按跨平台设计。
 
 ## 1. 背景与目标
 
-构建一个 Windows 桌面常驻工具，在系统托盘显示大模型「Token Plan」订阅套餐的用量信息；鼠标悬停时展开详情面板。首个接入厂商为 **小米 Xiaomi MiMo Token Plan**，架构需支持后续低成本接入其他厂商。
+构建一个跨平台常驻工具，在桌面系统托盘 / 移动端桌面小组件显示大模型「Token Plan」订阅套餐的用量信息；桌面端鼠标悬停托盘时展开详情面板，移动端打开 App 看详情、桌面小组件看概览。首个接入厂商为 **小米 Xiaomi MiMo Token Plan**，架构需支持后续低成本接入其他厂商。
 
 ### 1.1 数据来源（关键约束）
 
@@ -88,8 +88,8 @@ impl UsageData { pub fn remaining(&self) -> u64; pub fn percent_used(&self) -> f
 
 ### 3.3 Credential / CredentialStore
 
-- `Credential { cookies: Vec<(String,String)>, extra_headers: Vec<(String,String)>, obtained_at: i64 }`
-- 使用 Windows DPAPI（`windows` crate，`CryptProtectData`）加密后落盘到 `%APPDATA%/token-usage-board/credentials.bin`，避免明文存储。
+- `Credential { endpoint: String, cookies: Vec<(String,String)>, extra_headers: Vec<(String,String)>, obtained_at: i64 }`
+- 使用跨平台安全存储：`keyring` crate（Windows 凭证管理器 / macOS Keychain / Linux Secret Service）。序列化为 JSON 后存入 keyring 条目，key = `token-usage-board/<provider_id>`，避免明文落盘。移动端通过 Tauri 平台层桥接系统 Keystore/Keychain。
 - 接口：`get(provider_id) / save / clear / is_present`。
 
 ### 3.4 MiMoProvider
@@ -152,27 +152,66 @@ Refresher(默认10min) → MiMoProvider.fetch_usage(credential)
 ## 6. 测试策略
 
 - **Provider 解析（重点）**：用预先录制的真实内部 API 响应 JSON 作 fixture 做单元测试，断言解析出正确 tier / total / used / expire_at。不联网即可验证解析逻辑；改版时更新 fixture。
-- **CredentialStore**：测试 DPAPI 加密落盘 / 读取往返、is_present。
+- **CredentialStore**：测试 keyring 跨平台安全存储的落盘 / 读取往返、is_present。
 - **状态机**：测试状态流转（未登录→登录→过期→重新登录）。
 - **UI**：手动验证为主（托盘、悬停、面板数据展示）。
 
 ## 7. 技术选型与项目结构
 
-- 技术栈：Tauri v2（Rust 后端）+ TypeScript + Vite（前端）。
+- 技术栈：Tauri v2（Rust 后端，桌面端）+ TypeScript + Vite（前端）；移动端复用同一 Tauri 核心，前端按平台分入口。
+- 凭证存储：跨平台安全存储 —— 用 `keyring` crate（封装 Windows 凭证管理器 / macOS Keychain / Linux Secret Service），移动端通过 Tauri 平台层桥接 Keystore/Keychain。**不再使用 Windows DPAPI 直调**，`credential.rs` 改为调用 `keyring`，接口不变。
 - 开源：MIT 许可证；仓库名 `token-usage-board`。
+
+### 7.1 跨平台架构
+
+```
+┌──────────────────────────────────────────────────────┐
+│  平台 UI 层（分形态）                                  │
+│  ┌─────────────────────┐  ┌────────────────────────┐ │
+│  │ 桌面: 托盘+悬停面板  │  │ 移动: App主界面+Widget  │ │
+│  │ (Windows/mac/Linux) │  │ (iOS/Android)          │ │
+│  └──────────┬──────────┘  └───────────┬────────────┘ │
+└─────────────┼─────────────────────────┼──────────────┘
+              │  Tauri IPC (invoke/event)│
+┌─────────────┼─────────────────────────┼──────────────┐
+│  共享核心层 (Rust, 100% 复用)          │              │
+│  Provider trait + MiMoProvider / Refresher / 状态机   │
+│  CredentialStore ── keyring (各平台原生安全存储)       │
+└──────────────────────────────────────────────────────┘
+```
+
+桌面端交互：系统托盘图标 + 鼠标悬停弹玻璃面板 + 右键菜单。
+移动端交互：App 主界面（同款玻璃面板 UI，全屏适配）+ 桌面小组件（极简概览，原生 WidgetKit/AppWidget，后续阶段）。
+
+### 7.2 UI 视觉语言 — 深色玻璃质感（Glassmorphism）
+
+- **玻璃层**：`rgba(20,22,30,0.55)` 深色半透明 + `backdrop-filter: blur(24px) saturate(1.4)`，透出壁纸/下层窗口的朦胧感。
+- **描边与高光**：1px `rgba(255,255,255,0.08)` 描边；顶部一道 `rgba(255,255,255,0.18)` 高光边模拟玻璃受光。
+- **配色点缀**：主色蓝紫渐变 `#6a8dff→#8a6aff`（进度条/状态点 + 外发光）；成功青绿、警告琥珀、危险红，均带柔和 glow。
+- **字体层级**：标题大字距小号 caps，次要信息低对比灰，关键数字等宽突出，制造呼吸感。
+- **圆角阴影**：16px 圆角 + 多层柔和投影（`0 12px 40px rgba(0,0,0,.5)` + 内阴影）。
+- **微交互**：进度条 0.4s 缓动；按钮 hover 玻璃提亮 + `translateY(-1px)`；刷新按钮转圈。
+- **跨平台一致**：纯 CSS 实现，桌面 webview（WebView2/WKWebView）与移动端 webview 均原生支持 `backdrop-filter`，视觉一致。移动端面板改为全屏卡片布局。
+
+### 7.3 项目结构
 
 ```
 token-usage-board/
-├── src/                    # 前端 (TS + Vite): 悬停面板、登录页 UI
-├── src-tauri/              # Rust 后端
+├── src/                    # 前端 (TS + Vite)
+│   ├── main.ts             # 桌面悬停面板入口
+│   ├── mobile.ts           # 移动端主界面入口（后续阶段）
+│   ├── styles.css          # 深色玻璃质感样式（跨平台共享）
+│   └── index.html
+├── src-tauri/              # Rust 后端（共享核心）
 │   ├── src/
-│   │   ├── main.rs
+│   │   ├── main.rs         # 桌面入口
+│   │   ├── lib.rs          # 移动端入口 + 共享 setup
 │   │   ├── provider/       # trait + 统一模型
 │   │   │   ├── mod.rs      # Provider trait, UsageData
 │   │   │   └── mimo.rs     # MiMoProvider
-│   │   ├── credential.rs   # CredentialStore (DPAPI)
+│   │   ├── credential.rs   # CredentialStore (keyring, 跨平台)
 │   │   ├── refresher.rs    # 轮询器
-│   │   └── tray.rs         # 托盘图标与菜单
+│   │   └── tray.rs         # 桌面托盘 (cfg(desktop))
 │   ├── tests/fixtures/     # 录制的真实 API 响应 JSON
 │   └── tauri.conf.json
 ├── LICENSE                 # MIT
@@ -186,3 +225,4 @@ token-usage-board/
 - 用量历史曲线 / 统计图表。
 - 浏览器自动化抓取兜底（方案 C），待 API 失效真实发生时再评估。
 - 自动续费、套餐升级等操作（只读展示）。
+- **移动端实装**：架构与凭证存储按跨平台设计，但本期只交付 Windows 桌面端；macOS/Linux 与 iOS/Android 实装列为后续阶段，待桌面端稳定后再逐平台推进。

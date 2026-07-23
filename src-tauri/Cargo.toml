@@ -25,13 +25,16 @@ reqwest = { version = "0.12", features = ["json", "cookies"] }
 tokio = { version = "1", features = ["full"] }
 chrono = { version = "0.4", features = ["serde"] }
 anyhow = "1"
+keyring = "3"
 
 [target.'cfg(windows)'.dependencies]
-windows = { version = "0.61", features = [
-  "Win32_Security_Cryptography",
-  "Win32_System_LibraryLoader",
-  "Win32_Foundation",
-] }
+keyring = { version = "3", features = ["windows-native"] }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+keyring = { version = "3", features = ["apple-native"] }
+
+[target.'cfg(all(unix, not(target_os = "macos")))'.dependencies]
+keyring = { version = "3", features = ["linux-native-sync-persistent"] }
 
 [profile.dev]
 incremental = true

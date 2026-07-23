@@ -1,5 +1,4 @@
 use serde::{Deserialize, Serialize};
-use std::path::PathBuf;
 use thiserror::Error;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -12,120 +11,52 @@ pub struct Credential {
 
 #[derive(Debug, Error)]
 pub enum CredentialError {
-    #[error("io error: {0}")]
-    Io(String),
-    #[error("protect/unprotect failed: {0}")]
-    Crypto(String),
+    #[error("keyring error: {0}")]
+    Keyring(String),
     #[error("serde error: {0}")]
     Serde(String),
 }
 
-fn store_path() -> PathBuf {
-    let base = std::env::var("APPDATA")
-        .map(PathBuf::from)
-        .unwrap_or_else(|_| std::env::temp_dir());
-    base.join("token-usage-board")
-}
+const SERVICE: &str = "token-usage-board";
 
-fn file_for(provider_id: &str) -> PathBuf {
-    store_path().join(format!("credential-{provider_id}.bin"))
-}
-
-#[cfg(windows)]
-fn protect(data: &[u8]) -> Result<Vec<u8>, CredentialError> {
-    use std::ptr;
-    use windows::Win32::Foundation::LocalFree;
-    use windows::Win32::Security::Cryptography::{CryptProtectData, CRYPT_INTEGER_BLOB};
-
-    let mut input = CRYPT_INTEGER_BLOB {
-        cbData: data.len() as u32,
-        pbData: data.as_ptr() as *mut u8,
-    };
-    let mut output = CRYPT_INTEGER_BLOB {
-        cbData: 0,
-        pbData: ptr::null_mut(),
-    };
-    unsafe {
-        CryptProtectData(&mut input, None, None, None, None, 0, &mut output)
-            .map_err(|e| CredentialError::Crypto(e.to_string()))?;
-        let slice = std::slice::from_raw_parts(output.pbData, output.cbData as usize);
-        let result = slice.to_vec();
-        let _ = LocalFree(Some(windows::Win32::Foundation::HLOCAL(
-            output.pbData as *mut _,
-        )));
-        Ok(result)
-    }
-}
-
-#[cfg(windows)]
-fn unprotect(data: &[u8]) -> Result<Vec<u8>, CredentialError> {
-    use std::ptr;
-    use windows::Win32::Foundation::LocalFree;
-    use windows::Win32::Security::Cryptography::{CryptUnprotectData, CRYPT_INTEGER_BLOB};
-
-    let mut input = CRYPT_INTEGER_BLOB {
-        cbData: data.len() as u32,
-        pbData: data.as_ptr() as *mut u8,
-    };
-    let mut output = CRYPT_INTEGER_BLOB {
-        cbData: 0,
-        pbData: ptr::null_mut(),
-    };
-    unsafe {
-        CryptUnprotectData(&mut input, None, None, None, None, 0, &mut output)
-            .map_err(|e| CredentialError::Crypto(e.to_string()))?;
-        let slice = std::slice::from_raw_parts(output.pbData, output.cbData as usize);
-        let result = slice.to_vec();
-        let _ = LocalFree(Some(windows::Win32::Foundation::HLOCAL(
-            output.pbData as *mut _,
-        )));
-        Ok(result)
-    }
-}
-
-#[cfg(not(windows))]
-fn protect(data: &[u8]) -> Result<Vec<u8>, CredentialError> {
-    Ok(data.to_vec())
-}
-
-#[cfg(not(windows))]
-fn unprotect(data: &[u8]) -> Result<Vec<u8>, CredentialError> {
-    Ok(data.to_vec())
+fn entry(provider_id: &str) -> Result<keyring::Entry, CredentialError> {
+    keyring::Entry::new(SERVICE, provider_id).map_err(|e| CredentialError::Keyring(e.to_string()))
 }
 
 pub struct CredentialStore;
 
 impl CredentialStore {
     pub fn save(provider_id: &str, cred: &Credential) -> Result<(), CredentialError> {
-        std::fs::create_dir_all(store_path()).map_err(|e| CredentialError::Io(e.to_string()))?;
         let json =
-            serde_json::to_vec(cred).map_err(|e| CredentialError::Serde(e.to_string()))?;
-        let blob = protect(&json)?;
-        std::fs::write(file_for(provider_id), blob).map_err(|e| CredentialError::Io(e.to_string()))
+            serde_json::to_string(cred).map_err(|e| CredentialError::Serde(e.to_string()))?;
+        entry(provider_id)?
+            .set_password(&json)
+            .map_err(|e| CredentialError::Keyring(e.to_string()))
     }
 
     pub fn get(provider_id: &str) -> Result<Option<Credential>, CredentialError> {
-        let path = file_for(provider_id);
-        if !path.exists() {
-            return Ok(None);
+        let entry = entry(provider_id)?;
+        match entry.get_password() {
+            Ok(json) => {
+                let cred = serde_json::from_str(&json)
+                    .map_err(|e| CredentialError::Serde(e.to_string()))?;
+                Ok(Some(cred))
+            }
+            Err(keyring::Error::NoEntry) => Ok(None),
+            Err(e) => Err(CredentialError::Keyring(e.to_string())),
         }
-        let blob = std::fs::read(&path).map_err(|e| CredentialError::Io(e.to_string()))?;
-        let json = unprotect(&blob)?;
-        let cred =
-            serde_json::from_slice(&json).map_err(|e| CredentialError::Serde(e.to_string()))?;
-        Ok(Some(cred))
     }
 
     pub fn clear(provider_id: &str) -> Result<(), CredentialError> {
-        let path = file_for(provider_id);
-        if path.exists() {
-            std::fs::remove_file(&path).map_err(|e| CredentialError::Io(e.to_string()))?;
+        match entry(provider_id)?.delete_credential() {
+            Ok(()) => Ok(()),
+            Err(keyring::Error::NoEntry) => Ok(()),
+            Err(e) => Err(CredentialError::Keyring(e.to_string())),
         }
-        Ok(())
     }
 
     pub fn is_present(provider_id: &str) -> bool {
-        file_for(provider_id).exists()
+        matches!(Self::get(provider_id), Ok(Some(_)))
     }
 }
 
@@ -133,22 +64,28 @@ impl CredentialStore {
 mod tests {
     use super::*;
 
+    fn unique_id() -> String {
+        use std::sync::atomic::{AtomicU64, Ordering};
+        static SEQ: AtomicU64 = AtomicU64::new(0);
+        format!("mimo_test_{}", SEQ.fetch_add(1, Ordering::SeqCst))
+    }
+
     #[test]
     fn roundtrip() {
-        let id = "mimo_test";
+        let id = unique_id();
         let cred = Credential {
             endpoint: "https://example.com/api/usage".into(),
             cookies: vec![("session".into(), "abc123".into())],
             extra_headers: vec![("x-req".into(), "1".into())],
             obtained_at: 1_800_000_000,
         };
-        CredentialStore::save(id, &cred).expect("save");
-        let loaded = CredentialStore::get(id).expect("get").expect("some");
+        CredentialStore::save(&id, &cred).expect("save");
+        let loaded = CredentialStore::get(&id).expect("get").expect("some");
         assert_eq!(loaded.endpoint, cred.endpoint);
         assert_eq!(loaded.cookies, cred.cookies);
         assert_eq!(loaded.extra_headers, cred.extra_headers);
-        assert!(CredentialStore::is_present(id));
-        CredentialStore::clear(id).expect("clear");
-        assert!(!CredentialStore::is_present(id));
+        assert!(CredentialStore::is_present(&id));
+        CredentialStore::clear(&id).expect("clear");
+        assert!(!CredentialStore::is_present(&id));
     }
 }

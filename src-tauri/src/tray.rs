@@ -148,11 +148,11 @@ const CAPTURE_SCRIPT: &str = r#"
     try {
       const [input, init] = args;
       const url = typeof input === "string" ? input : (input && input.url);
-      if (url && /usage|plan|credit|quota/i.test(url)) {
+      if (url && /tokenPlan\/detail|tokenPlan\/usage|usage\/token-plan/i.test(url)) {
         const headers = (init && init.headers) || {};
         const cookies = parseCookies(document.cookie || "");
         window.__TAURI_INTERNALS__?.invoke("credential_candidate", {
-          endpoint: url,
+          baseUrl: location.origin,
           headers: headers,
           cookies: cookies,
         });
@@ -166,13 +166,13 @@ const CAPTURE_SCRIPT: &str = r#"
 #[tauri::command]
 pub async fn credential_candidate(
     app: tauri::AppHandle,
-    endpoint: String,
+    base_url: String,
     headers: serde_json::Value,
     cookies: Vec<(String, String)>,
 ) -> Result<(), String> {
     let state = app.state::<AppState>();
     let cred = Credential {
-        endpoint,
+        base_url,
         cookies,
         extra_headers: serde_json::from_value::<Vec<(String, String)>>(headers)
             .unwrap_or_default(),

@@ -1,0 +1,16 @@
+{
+  "code": 0,
+  "message": "",
+  "data": {
+    "planCode": "max",
+    "planName": "Max",
+    "currentPeriodEnd": "2026-07-26 23:59:59",
+    "expired": false,
+    "enableAutoRenew": false,
+    "autoRenewDiscount": null,
+    "hasAutoRenewSubscribed": true,
+    "clawEnabled": false,
+    "clawPeriodEnd": null,
+    "clawPurchased": false
+  }
+}

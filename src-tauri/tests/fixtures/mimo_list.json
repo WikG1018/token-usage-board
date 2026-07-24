@@ -1,0 +1,15 @@
+{
+  "code": 0,
+  "message": "",
+  "data": [
+    {"date": "2026-07", "model": "mimo-v2.5", "totalToken": 15353049, "inputHitToken": 13865344, "inputMissToken": 1293629, "outputToken": 194076, "requestCount": 328, "inputAudioDuration": 0},
+    {"date": "2026-07", "model": "mimo-v2.5-pro", "totalToken": 219383356, "inputHitToken": 203799616, "inputMissToken": 13965044, "outputToken": 1618696, "requestCount": 3783, "inputAudioDuration": 0},
+    {"date": "2026-06", "model": "mimo-v2.5", "totalToken": 26800424, "inputHitToken": 23669440, "inputMissToken": 2856703, "outputToken": 274281, "requestCount": 636, "inputAudioDuration": 0},
+    {"date": "2026-06", "model": "mimo-v2.5-pro", "totalToken": 205471923, "inputHitToken": 191180096, "inputMissToken": 13057289, "outputToken": 1234538, "requestCount": 4001, "inputAudioDuration": 0},
+    {"date": "2026-05", "model": "mimo-v2.5", "totalToken": 77737787, "inputHitToken": 70872704, "inputMissToken": 5891512, "outputToken": 973571, "requestCount": 2052, "inputAudioDuration": 0},
+    {"date": "2026-05", "model": "mimo-v2.5-pro", "totalToken": 410504410, "inputHitToken": 385874560, "inputMissToken": 22794045, "outputToken": 1835805, "requestCount": 6152, "inputAudioDuration": 0},
+    {"date": "2026-04", "model": "mimo-v2.5", "totalToken": 21459898, "inputHitToken": 20043328, "inputMissToken": 959312, "outputToken": 457258, "requestCount": 467, "inputAudioDuration": 0},
+    {"date": "2026-04", "model": "mimo-v2.5-pro", "totalToken": 190748251, "inputHitToken": 180258496, "inputMissToken": 9463575, "outputToken": 1026180, "requestCount": 2235, "inputAudioDuration": 0},
+    {"date": "2026-04", "model": "mimo-v2-pro", "totalToken": 38949196, "inputHitToken": 34787072, "inputMissToken": 3905950, "outputToken": 256174, "requestCount": 614, "inputAudioDuration": 0}
+  ]
+}

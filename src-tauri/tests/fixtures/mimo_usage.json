@@ -1,19 +1,34 @@
 {
   "code": 0,
-  "message": "ok",
+  "message": "",
   "data": {
-    "plan": "Standard",
-    "total_credits": 1000000,
-    "used_credits": 250000,
-    "expire_at": 1800000000,
-    "year_used": 800000000,
-    "month_used": 120000000,
-    "daily_usage": [
-      { "date": 1800000000, "used": 8000000 },
-      { "date": 1800086400, "used": 15000000 },
-      { "date": 1800172800, "used": 12000000 },
-      { "date": 1800259200, "used": 28000000 },
-      { "date": 1800345600, "used": 32000000 }
-    ]
+    "monthUsage": {
+      "percent": 0.0779,
+      "items": [
+        {
+          "name": "month_total_token",
+          "used": 6387380709,
+          "limit": 82000000000,
+          "percent": 0.0779
+        }
+      ]
+    },
+    "usage": {
+      "percent": 0.08,
+      "items": [
+        {
+          "name": "plan_total_token",
+          "used": 6387380709,
+          "limit": 82000000000,
+          "percent": 0.08
+        },
+        {
+          "name": "compensation_total_token",
+          "used": 0,
+          "limit": 0,
+          "percent": 0
+        }
+      ]
+    }
   }
 }

@@ -163,7 +163,7 @@ mod tooltip_tests {
                 fetched_at: now,
                 year_used: None,
                 month_used: None,
-                daily_usage: None,
+                monthly_usage: None,
             }),
             message: None,
         }

@@ -3,7 +3,8 @@ use thiserror::Error;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Credential {
-    pub endpoint: String,
+    /// API 基础地址，如 `https://platform.xiaomimimo.com`
+    pub base_url: String,
     pub cookies: Vec<(String, String)>,
     pub extra_headers: Vec<(String, String)>,
     pub obtained_at: i64,
@@ -74,14 +75,14 @@ mod tests {
     fn roundtrip() {
         let id = unique_id();
         let cred = Credential {
-            endpoint: "https://example.com/api/usage".into(),
+            base_url: "https://example.com".into(),
             cookies: vec![("session".into(), "abc123".into())],
             extra_headers: vec![("x-req".into(), "1".into())],
             obtained_at: 1_800_000_000,
         };
         CredentialStore::save(&id, &cred).expect("save");
         let loaded = CredentialStore::get(&id).expect("get").expect("some");
-        assert_eq!(loaded.endpoint, cred.endpoint);
+        assert_eq!(loaded.base_url, cred.base_url);
         assert_eq!(loaded.cookies, cred.cookies);
         assert_eq!(loaded.extra_headers, cred.extra_headers);
         assert!(CredentialStore::is_present(&id));

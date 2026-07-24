@@ -10,7 +10,7 @@ interface UsageData {
   fetched_at: number; // unix seconds
   year_used?: number | null;
   month_used?: number | null;
-  daily_usage?: Array<[number, number]> | null; // [date_unix_sec, used]
+  monthly_usage?: Array<[string, number]> | null; // ["YYYY-MM", tokens]
 }
 
 interface UsageState {
@@ -68,10 +68,11 @@ function fmtAgo(unixSec: number): string {
   return `${Math.floor(diff / 86400)} 天前`;
 }
 
-function fmtDayLabel(unixSec: number): string {
-  const d = new Date(unixSec * 1000);
-  const p = (x: number) => String(x).padStart(2, "0");
-  return `${p(d.getMonth() + 1)}/${p(d.getDate())}`;
+function fmtMonthLabel(ym: string): string {
+  // "2026-07" → "7月"
+  const parts = ym.split("-");
+  if (parts.length !== 2) return ym;
+  return `${parseInt(parts[1], 10)}月`;
 }
 
 function progressClass(d: UsageData): string {
@@ -135,8 +136,8 @@ function renderUsage(state: UsageState): string {
       </div>`
     : "";
 
-  // 近5日柱状图：仅当 daily_usage 存在且非空时渲染
-  const dailyBlock = renderDailyChart(d.daily_usage);
+  // 近6月柱状图：仅当 monthly_usage 存在且非空时渲染
+  const monthlyBlock = renderMonthlyChart(d.monthly_usage);
 
   return `
     <div class="panel">
@@ -183,7 +184,7 @@ function renderUsage(state: UsageState): string {
         </div>
       </div>
 
-      ${dailyBlock}
+      ${monthlyBlock}
 
       <div class="actions">
         <button class="btn" id="btn-refresh"><span class="spinner"></span><span class="label">刷新</span></button>
@@ -196,16 +197,16 @@ function renderUsage(state: UsageState): string {
 }
 
 /**
- * 渲染近5日柱状图。仅当 daily 非空时返回 HTML，否则返回空串（不渲染该区块）。
- * 柱高按当日用量 / max(全部用量) 计算；max 为 0 时所有柱子给极小高度避免全 0。
+ * 渲染近6月柱状图。仅当 monthly 非空时返回 HTML，否则返回空串（不渲染该区块）。
+ * 柱高按当月用量 / max(全部用量) 计算；max 为 0 时所有柱子给极小高度避免全 0。
  */
-function renderDailyChart(daily: UsageData["daily_usage"]): string {
-  if (!daily || daily.length === 0) return "";
-  const entries = daily.slice(-5); // 取最后5个，保证"近5日"
+function renderMonthlyChart(monthly: UsageData["monthly_usage"]): string {
+  if (!monthly || monthly.length === 0) return "";
+  const entries = monthly.slice(-6); // 取最后6个，保证"近6月"
   if (entries.length === 0) return "";
   const max = Math.max(1, ...entries.map((e) => e[1]));
   const bars = entries
-    .map(([ts, used]) => {
+    .map(([ym, used]) => {
       const h = Math.max(4, Math.round((used / max) * 100));
       return `
         <div class="bar-col">
@@ -214,13 +215,13 @@ function renderDailyChart(daily: UsageData["daily_usage"]): string {
               <span class="bar-value">${fmtTokens(used)}</span>
             </div>
           </div>
-          <span class="bar-day">${fmtDayLabel(ts)}</span>
+          <span class="bar-day">${fmtMonthLabel(ym)}</span>
         </div>`;
     })
     .join("");
   return `
     <div class="daily-chart">
-      <div class="chart-title">近 ${entries.length} 日用量</div>
+      <div class="chart-title">近 ${entries.length} 月用量</div>
       <div class="chart-bars">${bars}</div>
     </div>`;
 }
